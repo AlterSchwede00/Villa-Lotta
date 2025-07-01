@@ -1,0 +1,52 @@
+const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors');
+const { authenticate, login } = require('./auth');
+
+const app = express();
+const port = 3001;
+
+app.use(cors());
+app.use(express.json());
+
+const db = new sqlite3.Database('./database.sqlite');
+
+// Tabellen
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guest_name TEXT,
+      start_date TEXT,
+      end_date TEXT
+    )
+  `);
+});
+
+// Login
+app.post('/api/login', login);
+
+// Alle Buchungen (öffentlich)
+app.get('/api/bookings', (req, res) => {
+  db.all('SELECT * FROM bookings', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// Neue Buchung (authentifiziert)
+app.post('/api/bookings', authenticate, (req, res) => {
+  const { guest_name, start_date, end_date } = req.body;
+  db.run(
+    'INSERT INTO bookings (guest_name, start_date, end_date) VALUES (?, ?, ?)',
+    [guest_name, start_date, end_date],
+    function (err) {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+app.listen(port, () => {
+  console.log(`Server läuft auf http://localhost:${port}`);
+});
